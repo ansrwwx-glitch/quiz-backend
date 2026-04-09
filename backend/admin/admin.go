@@ -10,12 +10,6 @@ import (
 
 var db = sqldb.Named("quiz")
 
-type AuthData struct {
-	ID    int64  `json:"id"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
-}
-
 type Answer struct {
 	ID         int64  `json:"id"`
 	Text       string `json:"text"`
@@ -47,6 +41,7 @@ type CreateQuizParams struct {
 	OneAttempt    bool       `json:"one_attempt"`
 	ShowAnswers   bool       `json:"show_answers"`
 	Questions     []Question `json:"questions"`
+	Token         string     `json:"token"`
 }
 
 type QuizResponse struct {
@@ -65,17 +60,41 @@ type QuizList struct {
 	Quizzes []QuizListItem `json:"quizzes"`
 }
 
-func requireAdmin(ctx context.Context) error {
-	u, ok := auth.UserData[*AuthData](ctx)
-	if !ok || u.Role != "admin" {
-		return errors.New("admin access required")
+type TokenParam struct {
+	Token string `json:"token"`
+}
+
+func getUID(ctx context.Context) string {
+	uid, _ := auth.UserID(ctx)
+	return string(uid)
+}
+
+func getRoleFromDB(ctx context.Context, email string) (int64, string, error) {
+	var id int64
+	var role string
+	err := db.QueryRow(ctx, "SELECT id, role FROM users WHERE email=$1", email).Scan(&id, &role)
+	return id, role, err
+}
+
+func requireAdmin(ctx context.Context) (int64, error) {
+	email := getUID(ctx)
+	if email == "" {
+		return 0, errors.New("unauthorized")
 	}
-	return nil
+	id, role, err := getRoleFromDB(ctx, email)
+	if err != nil || role != "admin" {
+		return 0, errors.New("admin access required")
+	}
+	return id, nil
+}
+
+func trimBearer(token string) string {
+	return strings.TrimPrefix(token, "Bearer ")
 }
 
 // encore:api auth method=GET path=/admin/quizzes
 func ListQuizzes(ctx context.Context) (*QuizList, error) {
-	if err := requireAdmin(ctx); err != nil {
+	if _, err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -100,7 +119,8 @@ func ListQuizzes(ctx context.Context) (*QuizList, error) {
 
 // encore:api auth method=POST path=/admin/quizzes
 func CreateQuiz(ctx context.Context, p *CreateQuizParams) (*QuizResponse, error) {
-	if err := requireAdmin(ctx); err != nil {
+	userID, err := requireAdmin(ctx)
+	if err != nil {
 		return nil, err
 	}
 	if p.Title == "" {
@@ -110,12 +130,10 @@ func CreateQuiz(ctx context.Context, p *CreateQuizParams) (*QuizResponse, error)
 		return nil, errors.New("at least one question required")
 	}
 
-	u, _ := auth.UserData[*AuthData](ctx)
-
 	var quizID int64
-	err := db.QueryRow(ctx,
+	err = db.QueryRow(ctx,
 		"INSERT INTO quizzes (title, is_published, pass_threshold, one_attempt, show_answers, created_by) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id",
-		p.Title, p.IsPublished, p.PassThreshold, p.OneAttempt, p.ShowAnswers, u.ID,
+		p.Title, p.IsPublished, p.PassThreshold, p.OneAttempt, p.ShowAnswers, userID,
 	).Scan(&quizID)
 	if err != nil {
 		return nil, err
@@ -149,7 +167,7 @@ func CreateQuiz(ctx context.Context, p *CreateQuizParams) (*QuizResponse, error)
 
 // encore:api auth method=GET path=/admin/quizzes/:id
 func GetQuiz(ctx context.Context, id int64) (*Quiz, error) {
-	if err := requireAdmin(ctx); err != nil {
+	if _, err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -200,7 +218,7 @@ func GetQuiz(ctx context.Context, id int64) (*Quiz, error) {
 
 // encore:api auth method=PUT path=/admin/quizzes/:id
 func UpdateQuiz(ctx context.Context, id int64, p *CreateQuizParams) (*QuizResponse, error) {
-	if err := requireAdmin(ctx); err != nil {
+	if _, err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -246,7 +264,7 @@ type PublishResponse struct {
 
 // encore:api auth method=PATCH path=/admin/quizzes/:id/publish
 func TogglePublish(ctx context.Context, id int64) (*PublishResponse, error) {
-	if err := requireAdmin(ctx); err != nil {
+	if _, err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
 
@@ -266,7 +284,7 @@ func TogglePublish(ctx context.Context, id int64) (*PublishResponse, error) {
 
 // encore:api auth method=DELETE path=/admin/quizzes/:id
 func DeleteQuiz(ctx context.Context, id int64) error {
-	if err := requireAdmin(ctx); err != nil {
+	if _, err := requireAdmin(ctx); err != nil {
 		return err
 	}
 

@@ -10,10 +10,16 @@ import (
 
 var db = sqldb.Named("quiz")
 
-type AuthData struct {
-	ID    int64  `json:"id"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
+func getUID(ctx context.Context) string {
+	uid, _ := auth.UserID(ctx)
+	return string(uid)
+}
+
+func getUserFromDB(ctx context.Context, email string) (int64, string, error) {
+	var id int64
+	var role string
+	err := db.QueryRow(ctx, "SELECT id, role FROM users WHERE email=$1", email).Scan(&id, &role)
+	return id, role, err
 }
 
 type QuizListItem struct {
@@ -29,9 +35,13 @@ type QuizList struct {
 
 // encore:api auth method=GET path=/quizzes
 func ListQuizzes(ctx context.Context) (*QuizList, error) {
-	u, ok := auth.UserData[*AuthData](ctx)
-	if !ok {
+	email := getUID(ctx)
+	if email == "" {
 		return nil, errors.New("unauthorized")
+	}
+	userID, _, err := getUserFromDB(ctx, email)
+	if err != nil {
+		return nil, errors.New("user not found")
 	}
 
 	rows, err := db.Query(ctx,
@@ -41,7 +51,7 @@ func ListQuizzes(ctx context.Context) (*QuizList, error) {
 		FROM quizzes q
 		WHERE q.is_published = true
 		ORDER BY q.created_at DESC`,
-		u.ID,
+		userID,
 	)
 	if err != nil {
 		return nil, err
@@ -82,14 +92,18 @@ type QuizDetail struct {
 
 // encore:api auth method=GET path=/quizzes/:id
 func GetQuiz(ctx context.Context, id int64) (*QuizDetail, error) {
-	u, ok := auth.UserData[*AuthData](ctx)
-	if !ok {
+	email := getUID(ctx)
+	if email == "" {
 		return nil, errors.New("unauthorized")
+	}
+	userID, _, err := getUserFromDB(ctx, email)
+	if err != nil {
+		return nil, errors.New("user not found")
 	}
 
 	var q QuizDetail
 	var showAnswers bool
-	err := db.QueryRow(ctx,
+	err = db.QueryRow(ctx,
 		"SELECT id, title, one_attempt, pass_threshold, show_answers FROM quizzes WHERE id=$1 AND is_published=true",
 		id,
 	).Scan(&q.ID, &q.Title, &q.OneAttempt, &q.PassThreshold, &showAnswers)
@@ -101,7 +115,7 @@ func GetQuiz(ctx context.Context, id int64) (*QuizDetail, error) {
 		var count int
 		db.QueryRow(ctx,
 			"SELECT COUNT(*) FROM attempts WHERE quiz_id=$1 AND user_id=$2",
-			id, u.ID,
+			id, userID,
 		).Scan(&count)
 		if count > 0 {
 			return nil, errors.New("you have already attempted this quiz")
@@ -172,15 +186,19 @@ type SubmitResult struct {
 
 // encore:api auth method=POST path=/quizzes/:id/submit
 func SubmitQuiz(ctx context.Context, id int64, p *SubmitParams) (*SubmitResult, error) {
-	u, ok := auth.UserData[*AuthData](ctx)
-	if !ok {
+	email := getUID(ctx)
+	if email == "" {
 		return nil, errors.New("unauthorized")
+	}
+	userID, _, err := getUserFromDB(ctx, email)
+	if err != nil {
+		return nil, errors.New("user not found")
 	}
 
 	var oneAttempt bool
 	var passThreshold int
 	var showAnswers bool
-	err := db.QueryRow(ctx,
+	err = db.QueryRow(ctx,
 		"SELECT one_attempt, pass_threshold, show_answers FROM quizzes WHERE id=$1 AND is_published=true",
 		id,
 	).Scan(&oneAttempt, &passThreshold, &showAnswers)
@@ -192,7 +210,7 @@ func SubmitQuiz(ctx context.Context, id int64, p *SubmitParams) (*SubmitResult, 
 		var count int
 		db.QueryRow(ctx,
 			"SELECT COUNT(*) FROM attempts WHERE quiz_id=$1 AND user_id=$2",
-			id, u.ID,
+			id, userID,
 		).Scan(&count)
 		if count > 0 {
 			return nil, errors.New("you have already attempted this quiz")
@@ -233,7 +251,7 @@ func SubmitQuiz(ctx context.Context, id int64, p *SubmitParams) (*SubmitResult, 
 	var attemptID int64
 	err = db.QueryRow(ctx,
 		"INSERT INTO attempts (quiz_id, user_id, score, total) VALUES ($1,$2,$3,$4) RETURNING id",
-		id, u.ID, score, total,
+		id, userID, score, total,
 	).Scan(&attemptID)
 	if err != nil {
 		return nil, err

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"encore.dev/beta/auth"
+	"encore.dev/beta/errs"
 	"encore.dev/storage/sqldb"
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -25,12 +26,6 @@ type RegisterParams struct {
 
 type TokenResponse struct {
 	Token string `json:"token"`
-}
-
-type UserData struct {
-	ID    int64  `json:"id"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
 }
 
 // encore:api public method=POST path=/auth/register
@@ -105,8 +100,8 @@ func generateToken(id int64, email, role string) (string, error) {
 	return token.SignedString(jwtSecret)
 }
 
-// encore:authhandler
-func AuthHandler(ctx context.Context, token string) (auth.UID, *UserData, error) {
+//encore:authhandler
+func AuthHandler(ctx context.Context, token string) (auth.UID, error) {
 	t, err := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
@@ -114,18 +109,28 @@ func AuthHandler(ctx context.Context, token string) (auth.UID, *UserData, error)
 		return jwtSecret, nil
 	})
 	if err != nil || !t.Valid {
-		return "", nil, errors.New("invalid token")
+		return "", &errs.Error{Code: errs.Unauthenticated, Message: "invalid token"}
 	}
 
 	claims, ok := t.Claims.(jwt.MapClaims)
 	if !ok {
-		return "", nil, errors.New("invalid claims")
+		return "", &errs.Error{Code: errs.Unauthenticated, Message: "invalid claims"}
 	}
 
+	email := claims["email"].(string)
+	return auth.UID(email), nil
+}
+
+func ParseToken(token string) (int64, string, string, error) {
+	t, err := jwt.Parse(token, func(t *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+	if err != nil || !t.Valid {
+		return 0, "", "", errors.New("invalid token")
+	}
+	claims := t.Claims.(jwt.MapClaims)
 	id := int64(claims["sub"].(float64))
 	email := claims["email"].(string)
 	role := claims["role"].(string)
-
-	uid := auth.UID(email)
-	return uid, &UserData{ID: id, Email: email, Role: role}, nil
+	return id, email, role, nil
 }
