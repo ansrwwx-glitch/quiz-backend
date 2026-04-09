@@ -88,10 +88,6 @@ func requireAdmin(ctx context.Context) (int64, error) {
 	return id, nil
 }
 
-func trimBearer(token string) string {
-	return strings.TrimPrefix(token, "Bearer ")
-}
-
 // encore:api auth method=GET path=/admin/quizzes
 func ListQuizzes(ctx context.Context) (*QuizList, error) {
 	if _, err := requireAdmin(ctx); err != nil {
