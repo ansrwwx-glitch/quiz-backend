@@ -65,7 +65,7 @@ type TokenParam struct {
 }
 
 func getUID(ctx context.Context) string {
-	uid, _ := auth.UserID(ctx)
+	uid, _ := auth.UserID()
 	return string(uid)
 }
 

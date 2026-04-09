@@ -11,7 +11,7 @@ import (
 var db = sqldb.Named("quiz")
 
 func getUID(ctx context.Context) string {
-	uid, _ := auth.UserID(ctx)
+	uid, _ := auth.UserID()
 	return string(uid)
 }
 
