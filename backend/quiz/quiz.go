@@ -29,8 +29,8 @@ type QuizList struct {
 
 // encore:api auth method=GET path=/quizzes
 func ListQuizzes(ctx context.Context) (*QuizList, error) {
-	u := auth.Data[*AuthData](ctx)
-	if u == nil {
+	u, ok := auth.UserData[*AuthData](ctx)
+	if !ok {
 		return nil, errors.New("unauthorized")
 	}
 
@@ -82,8 +82,8 @@ type QuizDetail struct {
 
 // encore:api auth method=GET path=/quizzes/:id
 func GetQuiz(ctx context.Context, id int64) (*QuizDetail, error) {
-	u := auth.Data[*AuthData](ctx)
-	if u == nil {
+	u, ok := auth.UserData[*AuthData](ctx)
+	if !ok {
 		return nil, errors.New("unauthorized")
 	}
 
@@ -172,8 +172,8 @@ type SubmitResult struct {
 
 // encore:api auth method=POST path=/quizzes/:id/submit
 func SubmitQuiz(ctx context.Context, id int64, p *SubmitParams) (*SubmitResult, error) {
-	u := auth.Data[*AuthData](ctx)
-	if u == nil {
+	u, ok := auth.UserData[*AuthData](ctx)
+	if !ok {
 		return nil, errors.New("unauthorized")
 	}
 

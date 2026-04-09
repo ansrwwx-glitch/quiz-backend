@@ -66,8 +66,8 @@ type QuizList struct {
 }
 
 func requireAdmin(ctx context.Context) error {
-	u := auth.Data[*AuthData](ctx)
-	if u == nil || u.Role != "admin" {
+	u, ok := auth.UserData[*AuthData](ctx)
+	if !ok || u.Role != "admin" {
 		return errors.New("admin access required")
 	}
 	return nil
@@ -110,7 +110,7 @@ func CreateQuiz(ctx context.Context, p *CreateQuizParams) (*QuizResponse, error)
 		return nil, errors.New("at least one question required")
 	}
 
-	u := auth.Data[*AuthData](ctx)
+	u, _ := auth.UserData[*AuthData](ctx)
 
 	var quizID int64
 	err := db.QueryRow(ctx,
