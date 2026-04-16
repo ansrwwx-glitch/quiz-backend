@@ -11,23 +11,16 @@ export default function AdminQuizzesPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (getRole() !== "admin") {
-      router.push("/login");
-      return;
-    }
+    if (getRole() !== "admin") { router.push("/login"); return; }
     loadQuizzes();
   }, []);
 
   async function loadQuizzes() {
     try {
-      const client = getClient();
-      const res = await client.admin.ListQuizzes();
+      const res = await getClient().admin.ListQuizzes();
       setQuizzes(res.quizzes ?? []);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { setError(e.message); }
+    finally { setLoading(false); }
   }
 
   async function handleDelete(id: number) {
@@ -35,25 +28,14 @@ export default function AdminQuizzesPage() {
     try {
       await getClient().admin.DeleteQuiz(id);
       setQuizzes(quizzes.filter((q) => q.id !== id));
-    } catch (e: any) {
-      alert(e.message);
-    }
+    } catch (e: any) { alert(e.message); }
   }
 
   async function handleTogglePublish(id: number) {
     try {
       const res = await getClient().admin.TogglePublish(id);
-      setQuizzes(quizzes.map((q) =>
-        q.id === id ? { ...q, is_published: res.is_published } : q
-      ));
-    } catch (e: any) {
-      alert(e.message);
-    }
-  }
-
-  function handleLogout() {
-    clearAuth();
-    router.push("/login");
+      setQuizzes(quizzes.map((q) => q.id === id ? { ...q, is_published: res.is_published } : q));
+    } catch (e: any) { alert(e.message); }
   }
 
   if (loading) return <div style={styles.center}>Загрузка...</div>;
@@ -63,17 +45,11 @@ export default function AdminQuizzesPage() {
       <div style={styles.header}>
         <h1 style={styles.title}>Мои квизы</h1>
         <div style={{ display: "flex", gap: "12px" }}>
-          <button style={styles.createBtn} onClick={() => router.push("/admin/quizzes/new")}>
-            + Создать квиз
-          </button>
-          <button style={styles.logoutBtn} onClick={handleLogout}>
-            Выйти
-          </button>
+          <button style={styles.createBtn} onClick={() => router.push("/admin/quizzes/new")}>+ Создать квиз</button>
+          <button style={styles.logoutBtn} onClick={() => { clearAuth(); router.push("/login"); }}>Выйти</button>
         </div>
       </div>
-
       {error && <div style={styles.error}>{error}</div>}
-
       {quizzes.length === 0 ? (
         <div style={styles.empty}>Квизов пока нет. Создайте первый!</div>
       ) : (
@@ -88,18 +64,11 @@ export default function AdminQuizzesPage() {
               </div>
               <p style={styles.meta}>{quiz.question_count} вопросов</p>
               <div style={styles.actions}>
-                <button style={styles.editBtn} onClick={() => router.push(`/admin/quizzes/${quiz.id}/edit`)}>
-                  Редактировать
-                </button>
-                <button
-                  style={quiz.is_published ? styles.hideBtn : styles.publishBtn}
-                  onClick={() => handleTogglePublish(quiz.id)}
-                >
+                <button style={styles.editBtn} onClick={() => router.push(`/admin/quizzes/${quiz.id}/edit`)}>Редактировать</button>
+                <button style={quiz.is_published ? styles.hideBtn : styles.publishBtn} onClick={() => handleTogglePublish(quiz.id)}>
                   {quiz.is_published ? "Скрыть" : "Опубликовать"}
                 </button>
-                <button style={styles.deleteBtn} onClick={() => handleDelete(quiz.id)}>
-                  Удалить
-                </button>
+                <button style={styles.deleteBtn} onClick={() => handleDelete(quiz.id)}>Удалить</button>
               </div>
             </div>
           ))}
