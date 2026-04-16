@@ -1,10 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getClient, getRole } from "../../../lib/api";
+import { getClient } from "../../../lib/api";
 
-interface Answer { text: string; is_correct: boolean; order_index: number; }
-interface Question { text: string; order_index: number; answers: Answer[]; }
+interface Answer { id: number; text: string; is_correct: boolean; order_index: number; }
+interface Question { id: number; text: string; order_index: number; answers: Answer[]; }
+
+const emptyAnswer = (idx: number): Answer => ({ id: 0, text: "", is_correct: false, order_index: idx });
+const emptyQuestion = (idx: number): Question => ({ id: 0, text: "", order_index: idx, answers: [emptyAnswer(1), emptyAnswer(2)] });
 
 export default function NewQuizPage() {
   const router = useRouter();
@@ -13,149 +16,78 @@ export default function NewQuizPage() {
   const [passThreshold, setPassThreshold] = useState(0);
   const [oneAttempt, setOneAttempt] = useState(false);
   const [showAnswers, setShowAnswers] = useState(false);
-  const [questions, setQuestions] = useState<Question[]>([
-    { text: "", order_index: 1, answers: [
-      { text: "", is_correct: false, order_index: 1 },
-      { text: "", is_correct: false, order_index: 2 },
-    ]},
-  ]);
+  const [questions, setQuestions] = useState<Question[]>([emptyQuestion(1)]);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  function addQuestion() {
-    setQuestions([...questions, { text: "", order_index: questions.length + 1, answers: [
-      { text: "", is_correct: false, order_index: 1 },
-      { text: "", is_correct: false, order_index: 2 },
-    ]}]);
-  }
-
-  function removeQuestion(qi: number) {
-    setQuestions(questions.filter((_, i) => i !== qi));
-  }
-
-  function updateQuestion(qi: number, text: string) {
-    setQuestions(questions.map((q, i) => i === qi ? { ...q, text } : q));
-  }
-
-  function addAnswer(qi: number) {
-    setQuestions(questions.map((q, i) => i === qi ? {
-      ...q, answers: [...q.answers, { text: "", is_correct: false, order_index: q.answers.length + 1 }]
-    } : q));
-  }
-
-  function updateAnswer(qi: number, ai: number, text: string) {
-    setQuestions(questions.map((q, i) => i === qi ? {
-      ...q, answers: q.answers.map((a, j) => j === ai ? { ...a, text } : a)
-    } : q));
-  }
-
-  function setCorrectAnswer(qi: number, ai: number) {
-    setQuestions(questions.map((q, i) => i === qi ? {
-      ...q, answers: q.answers.map((a, j) => ({ ...a, is_correct: j === ai }))
-    } : q));
-  }
-
-  function removeAnswer(qi: number, ai: number) {
-    setQuestions(questions.map((q, i) => i === qi ? {
-      ...q, answers: q.answers.filter((_, j) => j !== ai)
-    } : q));
-  }
+  function addQuestion() { setQuestions([...questions, emptyQuestion(questions.length + 1)]); }
+  function removeQuestion(qi: number) { setQuestions(questions.filter((_, i) => i !== qi)); }
+  function updateQuestion(qi: number, text: string) { setQuestions(questions.map((q, i) => i === qi ? { ...q, text } : q)); }
+  function addAnswer(qi: number) { setQuestions(questions.map((q, i) => i === qi ? { ...q, answers: [...q.answers, emptyAnswer(q.answers.length + 1)] } : q)); }
+  function updateAnswer(qi: number, ai: number, text: string) { setQuestions(questions.map((q, i) => i === qi ? { ...q, answers: q.answers.map((a, j) => j === ai ? { ...a, text } : a) } : q)); }
+  function setCorrect(qi: number, ai: number) { setQuestions(questions.map((q, i) => i === qi ? { ...q, answers: q.answers.map((a, j) => ({ ...a, is_correct: j === ai })) } : q)); }
+  function removeAnswer(qi: number, ai: number) { setQuestions(questions.map((q, i) => i === qi ? { ...q, answers: q.answers.filter((_, j) => j !== ai) } : q)); }
 
   async function handleSave() {
     setError("");
-    if (!title.trim()) { setError("Введите название квиза"); return; }
+    if (!title.trim()) { setError("Введите название"); return; }
     for (const q of questions) {
       if (!q.text.trim()) { setError("Заполните текст всех вопросов"); return; }
-      if (q.answers.length < 2) { setError("Каждый вопрос должен иметь минимум 2 варианта"); return; }
       if (!q.answers.some((a) => a.is_correct)) { setError("Выберите правильный ответ для каждого вопроса"); return; }
     }
-    setLoading(true);
+    setSaving(true);
     try {
-      await getClient().admin.CreateQuiz({
-        title, is_published: isPublished, pass_threshold: passThreshold,
-        one_attempt: oneAttempt, show_answers: showAnswers, questions, token: ""
-      });
+      await getClient().admin.CreateQuiz({ title, is_published: isPublished, pass_threshold: passThreshold, one_attempt: oneAttempt, show_answers: showAnswers, questions, token: "" });
       router.push("/admin/quizzes");
     } catch (e: any) { setError(e.message); }
-    finally { setLoading(false); }
+    finally { setSaving(false); }
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <button style={styles.backBtn} onClick={() => router.push("/admin/quizzes")}>← Назад</button>
-        <h1 style={styles.title}>Новый квиз</h1>
+    <div style={s.container}>
+      <div style={s.header}>
+        <button style={s.backBtn} onClick={() => router.push("/admin/quizzes")}>← Назад</button>
+        <h1 style={s.title}>Новый квиз</h1>
       </div>
-      {error && <div style={styles.error}>{error}</div>}
-      <div style={styles.card}>
-        <label style={styles.label}>Название квиза *</label>
-        <input style={styles.input} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Введите название" />
-
-        <div style={styles.checkboxRow}>
-          <label style={styles.checkboxLabel}>
-            <input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} />
-            Опубликовать
-          </label>
-          <label style={styles.checkboxLabel}>
-            <input type="checkbox" checked={oneAttempt} onChange={(e) => setOneAttempt(e.target.checked)} />
-            Одна попытка
-          </label>
-          <label style={styles.checkboxLabel}>
-            <input type="checkbox" checked={showAnswers} onChange={(e) => setShowAnswers(e.target.checked)} />
-            Показать ответы после
-          </label>
+      {error && <div style={s.error}>{error}</div>}
+      <div style={s.card}>
+        <label style={s.label}>Название *</label>
+        <input style={s.input} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <div style={s.checkboxRow}>
+          <label style={s.checkboxLabel}><input type="checkbox" checked={isPublished} onChange={(e) => setIsPublished(e.target.checked)} /> Опубликован</label>
+          <label style={s.checkboxLabel}><input type="checkbox" checked={oneAttempt} onChange={(e) => setOneAttempt(e.target.checked)} /> Одна попытка</label>
+          <label style={s.checkboxLabel}><input type="checkbox" checked={showAnswers} onChange={(e) => setShowAnswers(e.target.checked)} /> Показать ответы</label>
         </div>
-
-        <label style={styles.label}>Порог прохождения, % (0 = без порога)</label>
-        <input style={styles.input} type="number" min={0} max={100} value={passThreshold} onChange={(e) => setPassThreshold(Number(e.target.value))} />
+        <label style={s.label}>Порог прохождения, %</label>
+        <input style={s.input} type="number" min={0} max={100} value={passThreshold} onChange={(e) => setPassThreshold(Number(e.target.value))} />
       </div>
-
-      <h2 style={styles.sectionTitle}>Вопросы</h2>
+      <h2 style={s.sectionTitle}>Вопросы</h2>
       {questions.map((q, qi) => (
-        <div key={qi} style={styles.questionCard}>
-          <div style={styles.questionHeader}>
-            <span style={styles.questionNum}>Вопрос {qi + 1}</span>
-            {questions.length > 1 && (
-              <button style={styles.removeBtn} onClick={() => removeQuestion(qi)}>Удалить вопрос</button>
-            )}
+        <div key={qi} style={s.questionCard}>
+          <div style={s.questionHeader}>
+            <span style={s.questionNum}>Вопрос {qi + 1}</span>
+            {questions.length > 1 && <button style={s.removeBtn} onClick={() => removeQuestion(qi)}>Удалить</button>}
           </div>
-          <input style={styles.input} value={q.text} onChange={(e) => updateQuestion(qi, e.target.value)} placeholder="Текст вопроса *" />
-
+          <input style={s.input} value={q.text} onChange={(e) => updateQuestion(qi, e.target.value)} placeholder="Текст вопроса" />
           <div style={{ marginTop: "12px" }}>
             {q.answers.map((a, ai) => (
-              <div key={ai} style={styles.answerRow}>
-                <input
-                  type="radio"
-                  name={`correct-${qi}`}
-                  checked={a.is_correct}
-                  onChange={() => setCorrectAnswer(qi, ai)}
-                />
-                <input
-                  style={{ ...styles.input, flex: 1, margin: 0 }}
-                  value={a.text}
-                  onChange={(e) => updateAnswer(qi, ai, e.target.value)}
-                  placeholder={`Вариант ${ai + 1}`}
-                />
-                {q.answers.length > 2 && (
-                  <button style={styles.removeAnswerBtn} onClick={() => removeAnswer(qi, ai)}>✕</button>
-                )}
+              <div key={ai} style={s.answerRow}>
+                <input type="radio" name={`correct-${qi}`} checked={a.is_correct} onChange={() => setCorrect(qi, ai)} />
+                <input style={{ ...s.input, flex: 1, margin: 0 }} value={a.text} onChange={(e) => updateAnswer(qi, ai, e.target.value)} placeholder={`Вариант ${ai + 1}`} />
+                {q.answers.length > 2 && <button style={s.removeAnswerBtn} onClick={() => removeAnswer(qi, ai)}>✕</button>}
               </div>
             ))}
-            <button style={styles.addAnswerBtn} onClick={() => addAnswer(qi)}>+ Добавить вариант</button>
+            <button style={s.addAnswerBtn} onClick={() => addAnswer(qi)}>+ Добавить вариант</button>
           </div>
         </div>
       ))}
-
-      <button style={styles.addQuestionBtn} onClick={addQuestion}>+ Добавить вопрос</button>
-
-      <button style={styles.saveBtn} onClick={handleSave} disabled={loading}>
-        {loading ? "Сохранение..." : "Сохранить квиз"}
-      </button>
+      <button style={s.addQuestionBtn} onClick={addQuestion}>+ Добавить вопрос</button>
+      <button style={s.saveBtn} onClick={handleSave} disabled={saving}>{saving ? "Сохранение..." : "Создать квиз"}</button>
     </div>
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   container: { maxWidth: "800px", margin: "0 auto", padding: "32px 16px" },
   header: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "24px" },
   backBtn: { background: "none", border: "1px solid #ddd", borderRadius: "8px", padding: "8px 16px", cursor: "pointer" },
